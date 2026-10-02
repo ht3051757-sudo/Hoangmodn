@@ -69,7 +69,8 @@ async function renderAdmin(){
 function esc(s){return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]))}
 
 let chatTimer=null;
-function defaultAvatar(){return "data:image/svg+xml;charset=UTF-8,"+encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64'><rect width='64' height='64' rx='32' fill='#171122'/><circle cx='32' cy='25' r='11' fill='#9d7cff'/><path d='M13 56c3-14 35-14 38 0' fill='#9d7cff'/></svg>")}\nfunction chatScroll(){let box=$("chatMessages");if(box)box.scrollTop=box.scrollHeight}
+function defaultAvatar(){return "data:image/svg+xml;charset=UTF-8,"+encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64'><rect width='64' height='64' rx='32' fill='#171122'/><circle cx='32' cy='25' r='11' fill='#9d7cff'/><path d='M13 56c3-14 35-14 38 0' fill='#9d7cff'/></svg>")}
+function chatScroll(){let box=$("chatMessages");if(box)box.scrollTop=box.scrollHeight}
 function renderChat(msgs,admin=false){
   let box=$(admin?"adminChat":"chatMessages"); if(!box)return;
   box.innerHTML=msgs.map(m=>`<div class="chatMsg"><img class="avatar" src="${m.avatar||defaultAvatar()}" alt=""><div class="chatBody"><div><b>${esc(m.username)}</b><small>${fmt(m.at)}</small></div><p>${esc(m.message)}</p></div></div>`).join("");
