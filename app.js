@@ -4,7 +4,7 @@ const state={chatId:0,avatar:localStorage.getItem("ug_avatar")||"",token:localSt
 
 function show(id){document.querySelectorAll(".page").forEach(x=>x.classList.remove("active"));$(id).classList.add("active");if(id==="admin")renderAdmin()}
 function toast(t){let x=$("toast");x.textContent=t;x.style.display="block";clearTimeout(window.tt);window.tt=setTimeout(()=>x.style.display="none",2300)}
-async function api(path,opts={}){let headers={"Content-Type":"application/json",...(opts.headers||{})};if(state.token)headers.Authorization="Bearer "+state.token;let r=await fetch(API+path,{...opts,headers});let d=await r.json().catch(()=>({error:"Phản hồi không hợp lệ"}));if(!r.ok)throw new Error(d.error||"Lỗi máy chủ");return d}
+async function api(path,opts={}){let headers={"Content-Type":"application/json",...(opts.headers||{})};if(state.token)headers.Authorization="Bearer "+state.token;let r=await fetch(API+path,{...opts,headers});let text=await r.text();let d;try{d=text?JSON.parse(text):{}}catch{throw new Error(`Máy chủ không trả JSON (HTTP ${r.status}). Hãy mở website bằng http://... và chạy node server.js.`)}if(!r.ok)throw new Error(d.error||`Lỗi máy chủ (HTTP ${r.status})`);return d}
 
 function setAuthMsg(t){$("authMsg").textContent=t}
 
@@ -61,9 +61,9 @@ async function renderAdmin(){
   try{
     let [s,u,k]=await Promise.all([api("/admin/stats"),api("/admin/users"),api("/admin/keys")]);
     $("statUsers").textContent=s.users;$("statOnline").textContent=s.online;$("statBanned").textContent=s.banned;$("statKeys").textContent=s.keys;
-    $("users").innerHTML=u.users.length?u.users.map(x=>`<div class="user"><span class="userIdentity"><img class="avatarSmall" src="${x.avatar||defaultAvatar()}" alt=""><span><b>${esc(x.username)}</b> ${x.banned?"— <b>ĐÃ BAN</b>":""}<br><small>Tạo: ${fmt(x.createdAt)} • Hoạt động cuối: ${fmt(x.lastSeen)}</small></span><button class="${x.banned?"":"ban"}" onclick="toggleBan('${encodeURIComponent(x.username)}',${x.banned})">${x.banned?"GỠ BAN":"BAN"}</button></div>`).join(""):"Chưa có tài khoản.";
+    $("users").innerHTML=u.users.length?u.users.map(x=>`<div class="user"><span class="userIdentity"><img class="avatarSmall" src="${x.avatar||defaultAvatar()}" alt=""><span><b>${esc(x.username)}</b> ${x.banned?"— <b>ĐÃ BAN</b>":""}<br><small>Tạo: ${fmt(x.createdAt)} • Hoạt động cuối: ${fmt(x.lastSeen)}</small></span><button class="${x.banned?"":"ban"}" onclick="toggleBan(decodeURIComponent('${encodeURIComponent(x.username).replace(/'/g,'%27')}'),${x.banned})">${x.banned?"GỠ BAN":"BAN"}</button></div>`).join(""):"Chưa có tài khoản.";
     renderAdminChat();
-    $("keyList").innerHTML=k.keys.length?k.keys.map(x=>`<div class="keyitem"><div><b>${esc(x.key)}</b><br><small>${x.date} • ${x.used}/${x.limit} lượt • ${x.active?"ĐANG BẬT":"TẮT"}</small></div><button onclick="toggleKey('${encodeURIComponent(x.id)}',${x.active})">${x.active?"TẮT":"BẬT"}</button></div>`).join(""):"Chưa có KEY.";
+    $("keyList").innerHTML=k.keys.length?k.keys.map(x=>`<div class="keyitem"><div><b>${esc(x.key)}</b><br><small>${x.date} • ${x.used}/${x.limit} lượt • ${x.active?"ĐANG BẬT":"TẮT"}</small></div><button onclick="toggleKey(decodeURIComponent('${encodeURIComponent(x.id)}'),${x.active})">${x.active?"TẮT":"BẬT"}</button></div>`).join(""):"Chưa có KEY.";
   }catch(e){if(/Admin|token|hết hạn/i.test(e.message)){state.token="";localStorage.removeItem("ug_admin_token")}toast(e.message)}
 }
 function esc(s){return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]))}
@@ -99,9 +99,7 @@ async function saveAvatar(){
 async function removeAvatar(){
   if(!state.user)return;
   try{
-    // A 1x1 transparent PNG acts as an explicit "no avatar" value.
-    let blank="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
-    let d=await api("/profile/avatar",{method:"POST",body:JSON.stringify({username:state.user,avatar:blank})});
+    let d=await api("/profile/avatar",{method:"POST",body:JSON.stringify({username:state.user,avatar:""})});
     state.avatar="";localStorage.removeItem("ug_avatar");$("avatarPreview").classList.add("hidden");$("avatarPreview").dataset.pending="";toast("Đã xóa avatar");
   }catch(e){toast(e.message)}
 }

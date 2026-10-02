@@ -1,6 +1,6 @@
 const http=require("http"),fs=require("fs"),path=require("path"),crypto=require("crypto"),url=require("url");
 const PORT=Number(process.env.PORT||3000);
-const ADMIN_PASSWORD=process.env.ADMIN_PASSWORD||"CHANGE_THIS_ADMIN_PASSWORD";
+const ADMIN_PASSWORD=String(process.env.ADMIN_PASSWORD||"admin123");
 const DATA_DIR=path.join(__dirname,"data"),DB_FILE=path.join(DATA_DIR,"db.json");
 fs.mkdirSync(DATA_DIR,{recursive:true});
 const empty={users:[],keys:[],bannedIPs:[],messages:[]};
@@ -21,7 +21,7 @@ function hash(s){return crypto.createHash("sha256").update(s).digest("hex")}
 function readBody(req){return new Promise((resolve,reject)=>{let b="";req.on("data",c=>{b+=c;if(b.length>1e6)req.destroy()});req.on("end",()=>{try{resolve(b?JSON.parse(b):{})}catch{reject(new Error("JSON không hợp lệ"))}})})}
 function token(){return crypto.randomBytes(32).toString("hex")}
 const adminTokens=new Map();
-function authAdmin(req){let h=req.headers.authorization||"";let t=h.startsWith("Bearer ")?h.slice(7):"";return adminTokens.has(t)}
+function authAdmin(req){let h=req.headers.authorization||"";let t=h.startsWith("Bearer ")?h.slice(7):"";let exp=adminTokens.get(t);if(!exp)return false;if(exp<=Date.now()){adminTokens.delete(t);return false}return true}
 function validName(s){return typeof s==="string"&&/^[A-Za-z0-9_.-]{3,32}$/.test(s)}
 function online(u){return u.lastSeen&&Date.now()-u.lastSeen<90000}
 
@@ -39,23 +39,23 @@ function isIPBanned(ip){ return !!ip && db.bannedIPs.includes(ip); }
 
 async function handler(req,res){
   let u=url.parse(req.url,true),p=u.pathname;
-  if(req.method==="OPTIONS"){res.writeHead(204,{"Access-Control-Allow-Origin":"*","Access-Control-Allow-Headers":"Content-Type, Authorization","Access-Control-Allow-Methods":"GET,POST,PATCH,OPTIONS"});return res.end()}
+  if(req.method==="OPTIONS"){res.writeHead(204,{"Access-Control-Allow-Origin":"*","Access-Control-Allow-Headers":"Content-Type, Authorization","Access-Control-Allow-Methods":"GET,POST,PATCH,DELETE,OPTIONS"});return res.end()}
   if(req.method==="GET" && p==="/api/stats")return send(res,200,{users:db.users.length,online:db.users.filter(x=>!x.banned&&online(x)).length,banned:db.users.filter(x=>x.banned).length,keys:db.keys.length,bannedIPs:db.bannedIPs.length});
   try{
     if(req.method==="POST"&&p==="/api/register"){
-      let b=await readBody(req),ip=requestIP(req); if(isIPBanned(ip))return send(res,403,{error:"IP của thiết bị đã bị BAN."});if(!validName(b.username)||typeof b.password!=="string"||b.password.length<4)return send(res,400,{error:"Tên tài khoản 3-32 ký tự; mật khẩu tối thiểu 4 ký tự."});
+      let b=await readBody(req),ip=requestIP(req); if(isIPBanned(ip))return send(res,403,{error:"IP của thiết bị đã bị BAN."});if(!validName(b.username)||typeof b.password!=="string"||b.password.length<4||b.password.length>128)return send(res,400,{error:"Tên tài khoản 3-32 ký tự; mật khẩu 4-128 ký tự."});
       if(db.users.some(x=>x.username.toLowerCase()===b.username.toLowerCase()))return send(res,409,{error:"Tên tài khoản đã tồn tại."});
       db.users.push({username:b.username,passwordHash:hash(b.password),banned:false,ip,avatar:"",createdAt:Date.now(),lastSeen:Date.now()});save();
       return send(res,201,{username:b.username});
     }
     if(req.method==="POST"&&p==="/api/login"){
-      let b=await readBody(req),ip=requestIP(req),x=db.users.find(x=>x.username===b.username); if(isIPBanned(ip))return send(res,403,{error:"IP của thiết bị đã bị BAN."});
+      let b=await readBody(req),ip=requestIP(req),name=String(b.username||"").trim(),x=db.users.find(x=>x.username.toLowerCase()===name.toLowerCase()); if(isIPBanned(ip))return send(res,403,{error:"IP của thiết bị đã bị BAN."});
       if(!x||x.passwordHash!==hash(String(b.password||"")))return send(res,401,{error:"Sai tài khoản hoặc mật khẩu."});
       if(x.banned)return send(res,403,{error:"Tài khoản của bạn đã bị BAN!"});
       x.lastSeen=Date.now();x.ip=ip;save();return send(res,200,{username:x.username,avatar:x.avatar||""});
     }
     if(req.method==="POST"&&p==="/api/presence"){
-      let b=await readBody(req),ip=requestIP(req),x=db.users.find(x=>x.username===b.username); if(isIPBanned(ip))return send(res,403,{error:"IP của thiết bị đã bị BAN."});
+      let b=await readBody(req),ip=requestIP(req),name=String(b.username||"").trim(),x=db.users.find(x=>x.username.toLowerCase()===name.toLowerCase()); if(isIPBanned(ip))return send(res,403,{error:"IP của thiết bị đã bị BAN."});
       if(!x||x.banned)return send(res,403,{error:"Tài khoản không hợp lệ hoặc đã bị BAN."});
       x.lastSeen=Date.now();x.ip=ip;save();return send(res,200,{ok:true});
     }
@@ -79,7 +79,7 @@ async function handler(req,res){
       if(!x||x.banned)return send(res,403,{error:"Tài khoản không hợp lệ hoặc đã bị BAN."});
       let avatar=String(b.avatar||"");
       // Accept browser-selected images encoded as data URLs.
-      if(!/^data:image\/(?:png|jpeg|webp|gif);base64,[A-Za-z0-9+/=\s]+$/i.test(avatar))
+      if(avatar && !/^data:image\/(?:png|jpeg|webp|gif);base64,[A-Za-z0-9+/=\s]+$/i.test(avatar))
         return send(res,400,{error:"Ảnh avatar không hợp lệ."});
       if(avatar.length>1_500_000)return send(res,413,{error:"Ảnh quá lớn. Hãy chọn ảnh nhỏ hơn."});
       x.avatar=avatar;x.lastSeen=Date.now();x.ip=ip;save();
@@ -142,9 +142,17 @@ async function handler(req,res){
   }catch(e){console.error(e);send(res,500,{error:"Lỗi máy chủ."})}
 }
 const mime={".html":"text/html; charset=utf-8",".js":"text/javascript; charset=utf-8",".css":"text/css; charset=utf-8"};
+const WEB_ROOT=__dirname;
 http.createServer((req,res)=>{
   if(req.url.startsWith("/api/"))return handler(req,res);
-  let pathname=decodeURIComponent(url.parse(req.url).pathname);if(pathname==="/")pathname="/index.html";
-  let f=path.join(__dirname,"public",pathname);if(!f.startsWith(path.join(__dirname,"public")))return send(res,403,{error:"Forbidden"});
-  fs.readFile(f,(e,d)=>{if(e)return send(res,404,{error:"Not found"});res.writeHead(200,{"Content-Type":mime[path.extname(f)]||"application/octet-stream"});res.end(d)});
+  let pathname=decodeURIComponent(url.parse(req.url).pathname);
+  if(pathname==="/")pathname="/index.html";
+  const root=path.resolve(WEB_ROOT);
+  const f=path.resolve(WEB_ROOT,"."+pathname);
+  if(f!==root && !f.startsWith(root+path.sep))return send(res,403,{error:"Forbidden"});
+  fs.readFile(f,(e,d)=>{
+    if(e)return send(res,404,{error:"Not found"});
+    res.writeHead(200,{"Content-Type":mime[path.extname(f)]||"application/octet-stream"});
+    res.end(d);
+  });
 }).listen(PORT,()=>console.log(`UGPHONE MOD running on http://localhost:${PORT}`));

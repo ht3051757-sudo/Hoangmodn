@@ -75,3 +75,10 @@ IP được lấy từ kết nối TCP trực tiếp (`req.socket.remoteAddress`
 - Chọn ảnh trực tiếp từ thiết bị bằng nút chọn file.
 - Hỗ trợ PNG/JPG/WebP/GIF, tối đa 1 MB ở giao diện.
 - Avatar được lưu trên server cùng tài khoản và hiển thị trong chat/Admin.
+
+
+## Mật khẩu Admin mặc định
+
+Nếu chưa đặt biến môi trường `ADMIN_PASSWORD`, mật khẩu Admin mặc định là `admin123`. Có thể đổi bằng biến môi trường `ADMIN_PASSWORD`.
+
+**Không mở `index.html` trực tiếp bằng file://.** Hãy chạy `npm start` rồi mở `http://localhost:3000`.
